@@ -1,0 +1,11 @@
+FROM wurstmeister/kafka
+
+WORKDIR /opt/kafka
+
+COPY lib/* /opt/kafka/libs/
+COPY connect-distributed.properties /opt/kafka/config/connect-distributed.properties
+COPY entrypoint.sh /opt/kafka/entrypoint.sh
+
+EXPOSE 8083
+
+CMD  "/opt/kafka/entrypoint.sh"

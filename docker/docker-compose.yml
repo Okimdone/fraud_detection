@@ -1,0 +1,132 @@
+version: '3'
+services:
+  ## KAFKA SERVICES
+  zookeeper:
+   image: wurstmeister/zookeeper
+   container_name: zookeeper
+   ports:
+       - "2181:2181"
+   networks:
+     - my-network
+     #- kafka-net
+
+  kafka_broker:
+    image: wurstmeister/kafka
+    container_name: kafka_broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      DOCKER_API_VERSION: 1.22
+      KAFKA_ADVERTISED_HOST_NAME: kafka_broker
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    networks:
+      - my-network
+        #- kafka-net
+        #- spark-kafka
+
+  kafka-connect:
+    build:
+      context: ./kafka-connect
+      dockerfile: Dockerfile.kafka-connect
+    container_name: kafka_connect
+    depends_on:
+      - kafka_broker
+      - zookeeper
+    ports:
+      - "8083:8083"
+    environment:
+      DOCKER_API_VERSION: 1.22
+      KAFKA_ADVERTISED_HOST_NAME: kafka-broker
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    volumes:
+      - ../data/KAGGLE_DS:/data
+    networks:
+      - my-network
+        #- kafka-net
+
+  ## SPARK SERVICES
+  spark:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+    container_name: spark_master
+    user: root
+    depends_on:
+      - kafka_broker
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - '8080:8080'
+    networks:
+      - my-network
+        #- spark-kafka
+        #- spark-net
+    volumes:
+      - ./spark/src:/app/src
+      - ./tensorflow/models/fraud_detector:/models/fraud_detector
+      - ./spark/jars:/opt/bitnami/spark/ivy:z
+      - ./spark/jars:/root/.ivy2/
+  spark-worker-1:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+    container_name: spark_worker_1
+    depends_on:
+      - spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    networks:
+      - my-network
+        #- spark-net
+  spark-worker-2:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+    container_name: spark_worker_2
+    depends_on:
+      - spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    networks:
+      - my-network
+        #- spark-net
+
+  tensorflow_serving:
+    image: tensorflow/serving
+    container_name: tensorflow_serving
+    environment:
+      - MODEL_NAME=fraud_detector
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./tensorflow/models:/models/
+
+networks:
+  my-network:
+    driver: bridge
+  #kafka-net:
+  #driver: bridge
+  #spark-kafka:
+  #driver: bridge
+  #spark-net:
+  #driver: bridge
